@@ -1,0 +1,5 @@
+{
+  "name": "BitJournal",
+  "description": "A local-first, 8-bit terminal style daily habit tracker with customizable questions, data visualization, and AI-powered insights.",
+  "requestFramePermissions": []
+}
