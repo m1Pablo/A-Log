@@ -1,56 +1,44 @@
 import React, { useState, useEffect } from 'react';
-import { DateRange } from '../types';
-import { getPresets, formatDate, stripTime } from '../services/dateUtils';
-import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { getSingleDatePresets, formatDate, stripTime } from '../services/dateUtils';
+import { Calendar as CalendarIcon, ChevronLeft, ChevronRight } from 'lucide-react';
 import { RetroButton } from './RetroButton';
 
-interface DateRangePickerProps {
-  range: DateRange;
-  onChange: (range: DateRange) => void;
+interface DatePickerProps {
+  date: Date;
+  onChange: (date: Date) => void;
 }
 
-export const DateRangePicker: React.FC<DateRangePickerProps> = ({ range, onChange }) => {
+export const DatePicker: React.FC<DatePickerProps> = ({ date, onChange }) => {
   const [isOpen, setIsOpen] = useState(false);
-  const [viewDate, setViewDate] = useState(new Date(range.start));
-  const [tempRange, setTempRange] = useState<DateRange>(range);
+  const [viewDate, setViewDate] = useState(new Date(date));
+  const [tempDate, setTempDate] = useState<Date>(date);
+  
+  // Calculate today at midnight for comparison
+  const today = stripTime(new Date());
 
-  // Sync temp range when opening or external change
   useEffect(() => {
     if (isOpen) {
-        setTempRange(range);
-        setViewDate(new Date(range.start));
+        setTempDate(new Date(date));
+        setViewDate(new Date(date));
     }
-  }, [isOpen, range]);
+  }, [isOpen, date]);
 
-  const presets = getPresets();
+  const presets = getSingleDatePresets();
 
   const handleDayClick = (day: Date) => {
-    // If we have a start but no end, or if we have both, start new selection
-    const startStr = formatDate(tempRange.start);
-    const endStr = formatDate(tempRange.end);
-    
-    // Reset if complete range exists and user clicks (start new range)
-    // Or if start > end (shouldn't happen but sanity check)
-    if (startStr !== endStr && tempRange.end) {
-        setTempRange({ start: day, end: day, label: 'Custom' });
-    } else {
-        // Completing the range
-        if (day < tempRange.start) {
-            setTempRange({ start: day, end: tempRange.start, label: 'Custom' });
-        } else {
-            setTempRange({ ...tempRange, end: day, label: 'Custom' });
-        }
-    }
+    // Prevent future dates
+    if (day > today) return;
+    setTempDate(day);
   };
 
-  const handlePresetClick = (preset: DateRange) => {
-    setTempRange(preset);
-    // Immediately jump calendar to the start of the preset
-    setViewDate(new Date(preset.start));
+  const handlePresetClick = (d: Date) => {
+    // Presets shouldn't technically generate future dates based on logic, but safe to update
+    setTempDate(d);
+    setViewDate(new Date(d));
   };
 
   const handleApply = () => {
-    onChange(tempRange);
+    onChange(tempDate);
     setIsOpen(false);
   };
 
@@ -85,7 +73,14 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({ range, onChang
                 <span className="font-bold text-lg">
                     {viewDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
                 </span>
-                <button onClick={() => setViewDate(new Date(year, month + 1, 1))} className="hover:text-[#8AFF80]">
+                <button 
+                  onClick={() => {
+                      // Optional: prevent going to next month if it's completely in the future? 
+                      // For now, allowing nav, just disabling days is sufficient.
+                      setViewDate(new Date(year, month + 1, 1))
+                  }} 
+                  className="hover:text-[#8AFF80]"
+                >
                     <ChevronRight className="w-5 h-5" />
                 </button>
             </div>
@@ -101,18 +96,16 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({ range, onChang
                     if (!d) return <div key={`empty-${idx}`} />;
                     
                     const dStr = formatDate(d);
-                    const sStr = formatDate(tempRange.start);
-                    const eStr = formatDate(tempRange.end);
-                    const isStart = dStr === sStr;
-                    const isEnd = dStr === eStr;
-                    const isInRange = d >= stripTime(tempRange.start) && d <= stripTime(tempRange.end);
+                    const selectedStr = formatDate(tempDate);
+                    const isSelected = dStr === selectedStr;
+                    const isFuture = d > today;
                     
                     let className = "w-8 h-8 flex items-center justify-center text-sm transition-colors border border-transparent ";
                     
-                    if (isStart || isEnd) {
+                    if (isFuture) {
+                        className += "text-[#708CA9]/20 cursor-not-allowed";
+                    } else if (isSelected) {
                         className += "bg-[#8AFF80] text-[#0B0D0F] font-bold border-[#8AFF80] cursor-pointer";
-                    } else if (isInRange) {
-                        className += "bg-[#8AFF80]/20 text-[#8AFF80] border-[#8AFF80]/30 cursor-pointer";
                     } else {
                         className += "text-[#708CA9] hover:border-[#708CA9] cursor-pointer";
                     }
@@ -135,7 +128,7 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({ range, onChang
         icon={<CalendarIcon className="w-4 h-4" />}
         className="w-full md:w-auto"
       >
-        {range.label || `${formatDate(range.start)} : ${formatDate(range.end)}`}
+        {formatDate(date)}
       </RetroButton>
 
       {isOpen && (
@@ -161,14 +154,13 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({ range, onChang
                     </div>
                     {Object.entries(presets).map(([category, items]) => (
                         <div key={category} className="mb-4">
-                            <div className="text-[#708CA9] text-xs uppercase opacity-70 mb-1 px-2">{category}</div>
                             {items.map(p => (
                                 <button
                                     key={p.label}
-                                    onClick={() => handlePresetClick(p)}
+                                    onClick={() => handlePresetClick(p.date)}
                                     className={`
                                         w-full text-left px-2 py-1 text-sm hover:bg-[#708CA9]/20 hover:text-[#8AFF80] transition-colors
-                                        ${tempRange.label === p.label ? 'text-[#8AFF80] font-bold bg-[#708CA9]/10' : 'text-[#708CA9]'}
+                                        ${formatDate(tempDate) === formatDate(p.date) ? 'text-[#8AFF80] font-bold bg-[#708CA9]/10' : 'text-[#708CA9]'}
                                     `}
                                 >
                                     {p.label}
@@ -183,9 +175,6 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({ range, onChang
                     {renderCalendar()}
                     
                     <div className="p-4 border-t-2 border-[#708CA9] flex justify-end gap-2 bg-[#0B0D0F] mt-auto">
-                         <span className="mr-auto text-xs text-[#708CA9] self-center hidden sm:inline-block">
-                            {formatDate(tempRange.start)} -&gt; {formatDate(tempRange.end)}
-                         </span>
                         <RetroButton variant="secondary" onClick={() => setIsOpen(false)} className="text-sm py-1 px-3">
                             CANCEL
                         </RetroButton>

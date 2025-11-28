@@ -1,11 +1,11 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { AppState, DateRange, Granularity } from '../types';
 import { aggregateData, getPresets } from '../services/dateUtils';
 import { DateRangePicker } from './DateRangePicker';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, CartesianGrid } from 'recharts';
 import { RetroButton } from './RetroButton';
 import { generateInsights } from '../services/geminiService';
-import { Brain, Terminal, Filter } from 'lucide-react';
+import { Brain, Terminal, Filter, CheckSquare, Square } from 'lucide-react';
 
 interface StatsViewProps {
   state: AppState;
@@ -19,17 +19,37 @@ export const StatsView: React.FC<StatsViewProps> = ({ state }) => {
   // Default range: Last 14 days
   const [dateRange, setDateRange] = useState<DateRange>(getPresets().Last[1]); // Index 1 is Last 14 days
   const [granularity, setGranularity] = useState<Granularity>('day');
+  
+  // Question Filter State
+  const [selectedQuestionIds, setSelectedQuestionIds] = useState<string[]>([]);
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
+
+  // Initialize selected IDs with all questions when questions load
+  useEffect(() => {
+    if (state.questions.length > 0 && selectedQuestionIds.length === 0) {
+        setSelectedQuestionIds(state.questions.map(q => q.id));
+    }
+  }, [state.questions.length]);
+
+  const filteredQuestions = useMemo(() => {
+    return state.questions.filter(q => selectedQuestionIds.includes(q.id));
+  }, [state.questions, selectedQuestionIds]);
 
   const chartData = useMemo(() => {
-    return aggregateData(state.logs, state.questions, dateRange, granularity);
-  }, [state.logs, state.questions, dateRange, granularity]);
+    return aggregateData(state.logs, filteredQuestions, dateRange, granularity);
+  }, [state.logs, filteredQuestions, dateRange, granularity]);
 
   const handleGenerateInsight = async () => {
     setLoading(true);
     setError(null);
     setInsight(null);
     try {
-      const result = await generateInsights(state);
+      // We pass the filtered questions to the AI as well to keep context relevant
+      const filteredState: AppState = {
+          ...state,
+          questions: filteredQuestions
+      };
+      const result = await generateInsights(filteredState);
       setInsight(result);
     } catch (err: any) {
       setError(err.message || "Failed to contact AI Core");
@@ -38,12 +58,23 @@ export const StatsView: React.FC<StatsViewProps> = ({ state }) => {
     }
   };
 
+  const toggleQuestion = (id: string) => {
+    if (selectedQuestionIds.includes(id)) {
+        setSelectedQuestionIds(prev => prev.filter(qid => qid !== id));
+    } else {
+        setSelectedQuestionIds(prev => [...prev, id]);
+    }
+  };
+
+  const selectAll = () => setSelectedQuestionIds(state.questions.map(q => q.id));
+  const clearAll = () => setSelectedQuestionIds([]);
+
   return (
     <div className="space-y-8">
-      <div className="border-b-2 border-[#708CA9] pb-4 mb-6 flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
-        <h2 className="text-3xl uppercase animate-pulse text-[#708CA9]">>> System Analytics</h2>
+      <div className="border-b-2 border-[#708CA9] pb-4 mb-6 flex flex-col xl:flex-row justify-between items-start xl:items-end gap-4">
+        <h2 className="text-3xl uppercase animate-pulse text-[#708CA9]">>> ANALYTICS</h2>
         
-        <div className="flex flex-col md:flex-row gap-4 w-full md:w-auto">
+        <div className="flex flex-col md:flex-row gap-4 w-full xl:w-auto items-start md:items-center flex-wrap">
           {/* Granularity Toggle */}
           <div className="flex border-2 border-[#708CA9]">
             {(['day', 'week', 'month'] as Granularity[]).map((g) => (
@@ -60,6 +91,51 @@ export const StatsView: React.FC<StatsViewProps> = ({ state }) => {
                 {g}
               </button>
             ))}
+          </div>
+
+          {/* Filter Dropdown */}
+          <div className="relative">
+             <RetroButton 
+                onClick={() => setIsFilterOpen(!isFilterOpen)} 
+                icon={<Filter className="w-4 h-4" />}
+                className={isFilterOpen ? 'bg-[#708CA9]/10' : ''}
+             >
+                SOURCES [{selectedQuestionIds.length}]
+             </RetroButton>
+
+             {isFilterOpen && (
+                 <>
+                    <div className="fixed inset-0 z-30" onClick={() => setIsFilterOpen(false)} />
+                    <div className="absolute top-full right-0 mt-2 w-72 bg-[#0B0D0F] border-2 border-[#708CA9] shadow-[8px_8px_0px_0px_rgba(112,140,169,0.5)] z-40 flex flex-col max-h-[400px]">
+                        <div className="p-2 border-b border-[#708CA9] flex justify-between bg-[#708CA9]/10">
+                            <button onClick={selectAll} className="text-xs text-[#8AFF80] hover:underline">ALL</button>
+                            <span className="text-xs text-[#708CA9]">FILTER_SOURCES</span>
+                            <button onClick={clearAll} className="text-xs text-[#FF80BF] hover:underline">NONE</button>
+                        </div>
+                        <div className="overflow-y-auto flex-1 p-2 space-y-1">
+                            {state.questions.map(q => {
+                                const isSelected = selectedQuestionIds.includes(q.id);
+                                return (
+                                    <div 
+                                        key={q.id} 
+                                        onClick={() => toggleQuestion(q.id)}
+                                        className={`
+                                            flex items-center gap-2 px-2 py-2 cursor-pointer transition-colors text-sm border border-transparent
+                                            ${isSelected ? 'bg-[#708CA9]/10 text-[#8AFF80] border-[#708CA9]/30' : 'text-[#708CA9] hover:border-[#708CA9]'}
+                                        `}
+                                    >
+                                        {isSelected ? <CheckSquare className="w-4 h-4 shrink-0" /> : <Square className="w-4 h-4 shrink-0" />}
+                                        <span className="truncate">{q.text}</span>
+                                    </div>
+                                )
+                            })}
+                            {state.questions.length === 0 && (
+                                <div className="p-4 text-center text-[#708CA9] text-xs">NO_SOURCES_FOUND</div>
+                            )}
+                        </div>
+                    </div>
+                 </>
+             )}
           </div>
 
           <DateRangePicker range={dateRange} onChange={setDateRange} />
@@ -79,13 +155,13 @@ export const StatsView: React.FC<StatsViewProps> = ({ state }) => {
               <XAxis 
                 dataKey="key" 
                 stroke="#708CA9" 
-                tick={{fill: '#708CA9', fontFamily: 'VT323', fontSize: 14}} 
+                tick={{fill: '#708CA9', fontFamily: 'Cascadia Code', fontSize: 14}} 
                 tickLine={false}
                 interval="preserveStartEnd"
               />
               <YAxis 
                 stroke="#708CA9" 
-                tick={{fill: '#708CA9', fontFamily: 'VT323'}}
+                tick={{fill: '#708CA9', fontFamily: 'Cascadia Code'}}
                 allowDecimals={false}
               />
               <Tooltip 

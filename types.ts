@@ -1,11 +1,19 @@
+
 export enum AnswerState {
   UNANSWERED = 'NULL',
   YES = 'YES',
   NO = 'NO'
 }
 
+export interface Project {
+  id: string;
+  name: string;
+  createdAt: number;
+}
+
 export interface Question {
   id: string;
+  projectId: string;
   text: string;
   schedule: number[]; // 0 (Sun) - 6 (Sat)
   createdAt: number;
@@ -18,6 +26,7 @@ export interface DailyLog {
 }
 
 export interface AppState {
+  projects: Project[];
   questions: Question[];
   logs: DailyLog;
 }
@@ -38,25 +47,4 @@ export const DAYS_OF_WEEK = [
   'Thursday',
   'Friday',
   'Saturday'
-];
-
-export const INITIAL_QUESTIONS: Question[] = [
-  {
-    id: 'q1',
-    text: 'Did you code today?',
-    schedule: [0, 1, 2, 3, 4, 5, 6],
-    createdAt: Date.now()
-  },
-  {
-    id: 'q2',
-    text: 'Did you drink enough water?',
-    schedule: [0, 1, 2, 3, 4, 5, 6],
-    createdAt: Date.now()
-  },
-  {
-    id: 'q3',
-    text: 'Did you exercise?',
-    schedule: [1, 3, 5], // Mon, Wed, Fri
-    createdAt: Date.now()
-  }
 ];

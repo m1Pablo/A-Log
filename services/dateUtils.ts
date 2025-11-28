@@ -13,13 +13,18 @@ export const addDays = (d: Date, days: number): Date => {
 };
 
 export const getStartOfWeek = (d: Date, startMonday: boolean = false): Date => {
-  const day = d.getDay();
-  const diff = d.getDate() - day + (startMonday ? (day === 0 ? -6 : 1) : 0);
-  return new Date(d.setDate(diff));
+  const result = new Date(d);
+  const day = result.getDay();
+  const diff = result.getDate() - day + (startMonday ? (day === 0 ? -6 : 1) : 0);
+  result.setDate(diff);
+  return result;
 };
 
 export const formatDate = (d: Date): string => {
-  return d.toISOString().split('T')[0];
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 };
 
 export const formatDisplayDate = (d: Date): string => {
@@ -78,6 +83,21 @@ export const getPresets = () => {
       { label: 'Last year', start: getStartOf(addDays(getStartOf(today, 'year'), -1), 'year'), end: getEndOf(addDays(getStartOf(today, 'year'), -1), 'year') },
     ]
   };
+};
+
+export const getSingleDatePresets = () => {
+    const today = stripTime(new Date());
+    const yesterday = addDays(today, -1);
+    const startOfWeek = getStartOfWeek(new Date(today));
+
+    return {
+        Quick: [
+            { label: 'Today', date: today },
+            { label: 'Yesterday', date: yesterday },
+            { label: 'Start of this week', date: startOfWeek },
+            { label: 'Last Sunday', date: getStartOfWeek(addDays(today, -7)) },
+        ]
+    };
 };
 
 // --- Aggregation Logic ---

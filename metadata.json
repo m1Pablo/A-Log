@@ -1,5 +1,5 @@
 {
-  "name": "BitJournal",
-  "description": "A local-first, 8-bit terminal style daily habit tracker with customizable questions, data visualization, and AI-powered insights.",
+  "name": "A-Log",
+  "description": "Your private, local-first personal daily log. A-Log keeps you accountable with customizable tracking, secure local SQLite storage, and 8-bit privacy-focused analytics.",
   "requestFramePermissions": []
 }
