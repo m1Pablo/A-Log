@@ -1,8 +1,9 @@
+
 import React, { useMemo, useState } from 'react';
 import { Question, AnswerState, DailyLog } from '../types';
-import { Check, X, Lock, Unlock, SkipBack, CalendarOff, Target, AlertTriangle } from 'lucide-react';
+import { Check, X, Lock, Unlock, SkipBack, CalendarOff, Target, AlertTriangle, ChevronLeft, ChevronRight } from 'lucide-react';
 import { DatePicker } from './DatePicker';
-import { formatDate, stripTime } from '../services/dateUtils';
+import { formatDate, stripTime, addDays } from '../services/dateUtils';
 import { RetroButton } from './RetroButton';
 
 interface DailyViewProps {
@@ -58,6 +59,19 @@ export const DailyView: React.FC<DailyViewProps> = ({ questions, logs, onUpdateL
       setShowUnlockModal(false);
   };
 
+  const handlePrevDay = () => {
+      const prev = addDays(selectedDate, -1);
+      setSelectedDate(prev);
+  };
+
+  const handleNextDay = () => {
+      const next = addDays(selectedDate, 1);
+      const today = new Date();
+      // Prevent going into future
+      if (formatDate(next) > formatDate(today)) return;
+      setSelectedDate(next);
+  };
+
   // --- CATEGORIZATION LOGIC ---
 
   // 1. Split questions into Scheduled for this day vs Not Scheduled
@@ -70,21 +84,47 @@ export const DailyView: React.FC<DailyViewProps> = ({ questions, logs, onUpdateL
   }, [questions, dayOfWeek]);
 
   // 2. Filter Active (Pending) - Only applies to TODAY and SCHEDULED questions that are UNANSWERED
+  //    HIDE Archived questions from pending list entirely
   const activeQuestions = useMemo(() => {
     if (!isToday) return [];
-    return scheduledQs.filter(q => getStatus(q.id) === AnswerState.UNANSWERED);
+    return scheduledQs.filter(q => !q.isArchived && getStatus(q.id) === AnswerState.UNANSWERED);
   }, [scheduledQs, logs, dateStr, isToday]);
 
   // 3. Filter Record (Scheduled) 
   // If Today: Show Scheduled questions that are NOT Unanswered
   // If Past: Show ALL Scheduled questions
+  // ARCHIVE LOGIC: If archived, only show if they have data (Answered)
   const recordScheduledQuestions = useMemo(() => {
-    if (!isToday) return scheduledQs;
-    return scheduledQs.filter(q => getStatus(q.id) !== AnswerState.UNANSWERED);
+    let list = scheduledQs;
+    
+    // First pass: Filter based on day state
+    if (isToday) {
+        list = list.filter(q => getStatus(q.id) !== AnswerState.UNANSWERED);
+    }
+    
+    // Second pass: Filter archived
+    return list.filter(q => {
+        if (q.isArchived) {
+            // Only show archived if they have a logged answer for this specific day
+            const status = getStatus(q.id);
+            return status !== AnswerState.UNANSWERED;
+        }
+        return true;
+    });
+
   }, [scheduledQs, logs, dateStr, isToday]);
 
   // 4. Filter Record (Unscheduled) - Show ALL Unscheduled questions always
-  const recordUnscheduledQuestions = unscheduledQs;
+  // ARCHIVE LOGIC: Same as above, only show if archived has data
+  const recordUnscheduledQuestions = useMemo(() => {
+      return unscheduledQs.filter(q => {
+          if (q.isArchived) {
+              const status = getStatus(q.id);
+              return status !== AnswerState.UNANSWERED;
+          }
+          return true;
+      });
+  }, [unscheduledQs, logs, dateStr]);
 
 
   const renderQuestionCard = (q: Question, locked: boolean) => {
@@ -95,12 +135,16 @@ export const DailyView: React.FC<DailyViewProps> = ({ questions, logs, onUpdateL
         className={`
             border-2 bg-[#0B0D0F] p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 transition-all
             ${locked ? 'border-[#708CA9]/20 opacity-70' : 'border-[#708CA9]/30 hover:border-[#708CA9]'}
+            ${!!q.isArchived && 'border-dashed opacity-60'}
         `}
       >
         <div className="flex flex-col gap-1">
-             <div className={`text-xs font-bold uppercase flex items-center gap-1 ${q.desiredOutcome === AnswerState.YES ? 'text-[#7FEDFA]' : 'text-[#FF9580]'} opacity-70`}>
-                 <Target className="w-3 h-3" />
-                 GOAL: {q.desiredOutcome}
+             <div className="flex items-center gap-2">
+                <div className={`text-xs font-bold uppercase flex items-center gap-1 ${q.desiredOutcome === AnswerState.YES ? 'text-[#7FEDFA]' : 'text-[#FF9580]'} opacity-70`}>
+                    <Target className="w-3 h-3" />
+                    GOAL: {q.desiredOutcome}
+                </div>
+                {!!q.isArchived && <span className="text-[10px] bg-[#708CA9] text-[#0B0D0F] px-1 font-bold">ARCHIVED</span>}
              </div>
              <span className={`text-xl md:text-2xl font-bold tracking-wider ${locked ? 'text-[#708CA9]/50' : 'text-[#708CA9]'}`}>
                {q.text}
@@ -116,7 +160,7 @@ export const DailyView: React.FC<DailyViewProps> = ({ questions, logs, onUpdateL
               px-6 py-2 border-2 flex items-center gap-2 font-bold transition-all uppercase
               ${status === AnswerState.YES 
                 ? locked 
-                   ? 'bg-[#7FEDFA]/30 border-[#7FEDFA]/30 text-[#7FEDFA] cursor-not-allowed' // Dimmer state
+                   ? 'bg-[#7FEDFA]/10 border-[#7FEDFA]/30 text-[#7FEDFA] cursor-not-allowed shadow-none' // Dimmer state
                    : 'bg-[#7FEDFA] border-[#7FEDFA] text-[#0B0D0F] shadow-[4px_4px_0px_0px_rgba(127,237,250,0.5)] translate-y-[-2px]' 
                 : locked 
                     ? 'border-[#708CA9]/20 text-[#708CA9]/20 cursor-not-allowed'
@@ -135,7 +179,7 @@ export const DailyView: React.FC<DailyViewProps> = ({ questions, logs, onUpdateL
               px-6 py-2 border-2 flex items-center gap-2 font-bold transition-all uppercase
               ${status === AnswerState.NO 
                 ? locked
-                   ? 'bg-[#FF9580]/30 border-[#FF9580]/30 text-[#FF9580] cursor-not-allowed' // Dimmer state
+                   ? 'bg-[#FF9580]/10 border-[#FF9580]/30 text-[#FF9580] cursor-not-allowed shadow-none' // Dimmer state
                    : 'bg-[#FF9580] border-[#FF9580] text-[#0B0D0F] shadow-[4px_4px_0px_0px_rgba(255,149,128,0.5)] translate-y-[-2px]' 
                 : locked 
                     ? 'border-[#708CA9]/20 text-[#708CA9]/20 cursor-not-allowed'
@@ -153,7 +197,7 @@ export const DailyView: React.FC<DailyViewProps> = ({ questions, logs, onUpdateL
   return (
     <div className="space-y-8">
       <div className="border-b-2 border-[#708CA9] pb-4 mb-6 flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
-        <h2 className="text-3xl uppercase animate-pulse text-[#708CA9]">>> DAILY LOGS</h2>
+        <h2 className="text-3xl uppercase animate-pulse text-[#708CA9]">>> LOGS</h2>
         <div className="flex items-center gap-2">
             {!isToday && (
                 <RetroButton 
@@ -165,7 +209,24 @@ export const DailyView: React.FC<DailyViewProps> = ({ questions, logs, onUpdateL
                     TODAY
                 </RetroButton>
             )}
-            <DatePicker date={selectedDate} onChange={setSelectedDate} />
+            <div className="flex items-center gap-2">
+                <button 
+                    onClick={handlePrevDay}
+                    className="h-10 w-10 flex items-center justify-center text-[#708CA9] hover:text-[#8AFF80] hover:scale-110 transition-all"
+                    title="Previous Day"
+                >
+                    <ChevronLeft className="w-6 h-6" />
+                </button>
+                <DatePicker date={selectedDate} onChange={setSelectedDate} />
+                <button 
+                    onClick={handleNextDay}
+                    disabled={isToday}
+                    className={`h-10 w-10 flex items-center justify-center transition-all ${isToday ? 'opacity-30 cursor-not-allowed text-[#708CA9]' : 'text-[#708CA9] hover:text-[#8AFF80] hover:scale-110'}`}
+                    title="Next Day"
+                >
+                    <ChevronRight className="w-6 h-6" />
+                </button>
+            </div>
         </div>
       </div>
 

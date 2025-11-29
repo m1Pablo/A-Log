@@ -91,12 +91,18 @@ export const getSingleDatePresets = () => {
     const yesterday = addDays(today, -1);
     const startOfWeek = getStartOfWeek(new Date(today));
 
+    const sameDayLastWeek = addDays(today, -7);
+    const sameDayLastYear = new Date(today);
+    sameDayLastYear.setFullYear(today.getFullYear() - 1);
+
     return {
         Quick: [
             { label: 'Today', date: today },
             { label: 'Yesterday', date: yesterday },
             { label: 'Start of this week', date: startOfWeek },
             { label: 'Last Sunday', date: getStartOfWeek(addDays(today, -7)) },
+            { label: 'Last Week (Same Day)', date: sameDayLastWeek },
+            { label: 'Last Year (Same Day)', date: sameDayLastYear },
         ]
     };
 };
@@ -160,10 +166,11 @@ export const aggregateData = (
     const daysQuestions = questions.filter(q => q.schedule.includes(dayOfWeek));
     
     daysQuestions.forEach(q => {
+      // Increment potential total regardless of whether it was answered
+      entry.total++;
+
       const ans = log[q.id];
       if (ans && ans !== AnswerState.UNANSWERED) {
-          entry.total++;
-          
           if (viewMode === 'raw') {
               if (ans === AnswerState.YES) entry.yes++;
               if (ans === AnswerState.NO) entry.no++;

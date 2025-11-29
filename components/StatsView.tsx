@@ -6,7 +6,7 @@ import { DateRangePicker } from './DateRangePicker';
 import { ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, CartesianGrid, ReferenceLine } from 'recharts';
 import { RetroButton } from './RetroButton';
 import { generateInsights } from '../services/geminiService';
-import { Brain, Terminal, Filter, CheckSquare, Square, Target, BarChart2, Check } from 'lucide-react';
+import { Brain, Terminal, Filter, CheckSquare, Square, Target, BarChart2, Check, Layout, Grid } from 'lucide-react';
 
 interface StatsViewProps {
   state: AppState;
@@ -22,7 +22,7 @@ const CustomTooltip = ({ active, payload, label, viewMode }: any) => {
             if (entry.dataKey === 'total') {
                 return (
                     <div key="total" className="text-sm font-bold flex items-center justify-between gap-4 text-[#8AFF80] border-t border-[#708CA9]/30 mt-1 pt-1">
-                        <span>TOTAL LOGGED:</span>
+                        <span>TARGET (SCHEDULED):</span>
                         <span>{entry.value}</span>
                     </div>
                 );
@@ -115,24 +115,6 @@ export const StatsView: React.FC<StatsViewProps> = ({ state }) => {
         <h2 className="text-3xl uppercase animate-pulse text-[#708CA9]">>> ANALYTICS</h2>
         
         <div className="flex flex-col md:flex-row gap-4 w-full xl:w-auto items-start md:items-center flex-wrap">
-          {/* Granularity Toggle */}
-          <div className="flex border-2 border-[#708CA9]">
-            {(['day', 'week', 'month'] as Granularity[]).map((g) => (
-              <button
-                key={g}
-                onClick={() => setGranularity(g)}
-                className={`
-                  px-3 py-1 text-sm uppercase font-mono transition-colors
-                  ${granularity === g 
-                    ? 'bg-[#708CA9] text-[#0B0D0F] font-bold' 
-                    : 'bg-[#0B0D0F] text-[#708CA9] hover:text-[#8AFF80]'}
-                `}
-              >
-                {g}
-              </button>
-            ))}
-          </div>
-
           {/* Filter Dropdown */}
           <div className="relative">
              <RetroButton 
@@ -184,40 +166,64 @@ export const StatsView: React.FC<StatsViewProps> = ({ state }) => {
 
       {/* Chart Section */}
       <div className="border-2 border-[#708CA9] p-4 bg-[#0B0D0F] relative">
-        <div className="absolute top-0 left-0 bg-[#708CA9] text-[#0B0D0F] px-2 text-sm font-bold flex items-center gap-2">
-           <BarChart2 className="w-3 h-3" />
-           DATA_VISUALIZATION
-        </div>
-        
-        {/* View Mode Toggle */}
-        <div className="absolute top-2 right-2 flex gap-2">
-            <button 
-                onClick={() => setViewMode('raw')}
-                className={`
-                    px-2 py-1 text-xs font-bold border flex items-center gap-1 transition-colors
-                    ${viewMode === 'raw' 
-                        ? 'bg-[#8AFF80] text-[#0B0D0F] border-[#8AFF80]' 
-                        : 'text-[#708CA9] border-[#708CA9] bg-[#0B0D0F] hover:text-[#8AFF80] hover:border-[#8AFF80]'}
-                `}
-            >
-                <Check className="w-3 h-3" />
-                RAW (YES/NO)
-            </button>
-            <button 
-                onClick={() => setViewMode('adherence')}
-                className={`
-                    px-2 py-1 text-xs font-bold border flex items-center gap-1 transition-colors
-                    ${viewMode === 'adherence' 
-                        ? 'bg-[#8AFF80] text-[#0B0D0F] border-[#8AFF80]' 
-                        : 'text-[#708CA9] border-[#708CA9] bg-[#0B0D0F] hover:text-[#8AFF80] hover:border-[#8AFF80]'}
-                `}
-            >
-                <Target className="w-3 h-3" />
-                ADHERENCE (SUCCESS/FAIL)
-            </button>
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-4 bg-[#0B0D0F]">
+            <div className="bg-[#708CA9] text-[#0B0D0F] px-2 text-sm font-bold flex items-center gap-2 py-1">
+                <BarChart2 className="w-3 h-3" />
+                DATA_VISUALIZATION
+            </div>
+
+            <div className="flex flex-wrap gap-4 items-center">
+                 {/* Granularity Toggle Group */}
+                 <div className="flex border border-[#708CA9]">
+                    {(['day', 'week', 'month'] as Granularity[]).map((g) => (
+                    <button
+                        key={g}
+                        onClick={() => setGranularity(g)}
+                        className={`
+                        px-2 py-1 text-xs uppercase font-mono transition-colors border-r border-[#708CA9] last:border-r-0
+                        ${granularity === g 
+                            ? 'bg-[#708CA9] text-[#0B0D0F] font-bold' 
+                            : 'bg-[#0B0D0F] text-[#708CA9] hover:text-[#8AFF80]'}
+                        `}
+                    >
+                        {g}
+                    </button>
+                    ))}
+                </div>
+
+                <div className="h-6 w-px bg-[#708CA9]/50 hidden md:block"></div>
+
+                {/* View Mode Toggle Group */}
+                <div className="flex gap-2">
+                    <button 
+                        onClick={() => setViewMode('raw')}
+                        className={`
+                            px-2 py-1 text-xs font-bold border flex items-center gap-1 transition-colors
+                            ${viewMode === 'raw' 
+                                ? 'bg-[#8AFF80] text-[#0B0D0F] border-[#8AFF80]' 
+                                : 'text-[#708CA9] border-[#708CA9] bg-[#0B0D0F] hover:text-[#8AFF80] hover:border-[#8AFF80]'}
+                        `}
+                    >
+                        <Check className="w-3 h-3" />
+                        RAW (YES/NO)
+                    </button>
+                    <button 
+                        onClick={() => setViewMode('adherence')}
+                        className={`
+                            px-2 py-1 text-xs font-bold border flex items-center gap-1 transition-colors
+                            ${viewMode === 'adherence' 
+                                ? 'bg-[#8AFF80] text-[#0B0D0F] border-[#8AFF80]' 
+                                : 'text-[#708CA9] border-[#708CA9] bg-[#0B0D0F] hover:text-[#8AFF80] hover:border-[#8AFF80]'}
+                        `}
+                    >
+                        <Target className="w-3 h-3" />
+                        ADHERENCE (SUCCESS/FAIL)
+                    </button>
+                </div>
+            </div>
         </div>
 
-        <div className="h-80 mt-10">
+        <div className="h-80 w-full">
           <ResponsiveContainer width="100%" height="100%">
             <ComposedChart data={chartData} margin={{top: 20, right: 30, left: 0, bottom: 5}} stackOffset="sign">
               <CartesianGrid stroke="#708CA9" strokeDasharray="3 3" vertical={false} opacity={0.2} />

@@ -18,6 +18,7 @@ export interface Question {
   desiredOutcome: AnswerState; // YES or NO
   schedule: number[]; // 0 (Sun) - 6 (Sat)
   createdAt: number;
+  isArchived?: number; // 0 or 1
 }
 
 export interface DailyLog {

@@ -1,3 +1,4 @@
+
 import { AppState, Question, DailyLog, AnswerState, Project } from '../types';
 
 declare global {
@@ -63,6 +64,9 @@ const SEED_PROJECT: Project = {
   createdAt: Date.now()
 };
 
+// Set creation date to 60 days ago so mock data (45 days) is valid
+const MOCK_START_DATE = Date.now() - (60 * 24 * 60 * 60 * 1000);
+
 const SEED_QUESTIONS: Question[] = [
   {
     id: 'q_health_food',
@@ -70,7 +74,8 @@ const SEED_QUESTIONS: Question[] = [
     text: 'Did you eat whole foods today?',
     desiredOutcome: AnswerState.YES,
     schedule: [0, 1, 2, 3, 4, 5, 6], // Daily
-    createdAt: Date.now()
+    createdAt: MOCK_START_DATE,
+    isArchived: 0
   },
   {
     id: 'q_health_exercise',
@@ -78,7 +83,8 @@ const SEED_QUESTIONS: Question[] = [
     text: 'Did you exercise for 30 mins?',
     desiredOutcome: AnswerState.YES,
     schedule: [0, 1, 2, 3, 4, 5, 6], // Daily
-    createdAt: Date.now()
+    createdAt: MOCK_START_DATE,
+    isArchived: 0
   },
   {
     id: 'q_wlb_logoff',
@@ -86,7 +92,8 @@ const SEED_QUESTIONS: Question[] = [
     text: 'Did you log off work by 6PM?',
     desiredOutcome: AnswerState.YES,
     schedule: [1, 2, 3, 4, 5], // Mon-Fri
-    createdAt: Date.now()
+    createdAt: MOCK_START_DATE,
+    isArchived: 0
   },
   {
     id: 'q_doomscroll',
@@ -94,7 +101,8 @@ const SEED_QUESTIONS: Question[] = [
     text: 'Did you doomscroll on social media?',
     desiredOutcome: AnswerState.NO,
     schedule: [0, 1, 2, 3, 4, 5, 6], // Daily
-    createdAt: Date.now()
+    createdAt: MOCK_START_DATE,
+    isArchived: 0
   },
   {
     id: 'q_self_leisure',
@@ -102,7 +110,8 @@ const SEED_QUESTIONS: Question[] = [
     text: 'Did you do something just for yourself?',
     desiredOutcome: AnswerState.YES,
     schedule: [0, 1, 2, 3, 4, 5, 6], // Daily
-    createdAt: Date.now()
+    createdAt: MOCK_START_DATE,
+    isArchived: 0
   },
   {
     id: 'q_social_friends',
@@ -110,7 +119,8 @@ const SEED_QUESTIONS: Question[] = [
     text: 'Did you check in with friends this week?',
     desiredOutcome: AnswerState.YES,
     schedule: [0], // Sunday check-in
-    createdAt: Date.now()
+    createdAt: MOCK_START_DATE,
+    isArchived: 0
   },
   {
     id: 'q_social_family',
@@ -118,7 +128,8 @@ const SEED_QUESTIONS: Question[] = [
     text: 'Did you call your family?',
     desiredOutcome: AnswerState.YES,
     schedule: [0], // Sunday check-in
-    createdAt: Date.now()
+    createdAt: MOCK_START_DATE,
+    isArchived: 0
   }
 ];
 
@@ -143,6 +154,9 @@ const generateMockLogs = (questions: Question[]) => {
         const dayOfWeek = date.getDay(); // 0 Sun - 6 Sat
 
         questions.forEach(q => {
+            // Check if question existed at this date
+            if (date.getTime() < q.createdAt) return;
+
             // Check if question is scheduled for this day
             if (q.schedule.includes(dayOfWeek)) {
                 // Simulation Logic: 10% chance to forget logging entirely
@@ -224,9 +238,12 @@ export const initDB = async (): Promise<AppState> => {
     // MIGRATION: Add desired_outcome column if missing
     try {
         db.run("ALTER TABLE questions ADD COLUMN desired_outcome TEXT DEFAULT 'YES'"); 
-    } catch(e) {
-        // Column likely exists
-    }
+    } catch(e) {}
+
+    // MIGRATION: Add is_archived column if missing
+    try {
+        db.run("ALTER TABLE questions ADD COLUMN is_archived INTEGER DEFAULT 0"); 
+    } catch(e) {}
     
     // DATA SEEDING CHECK: If logs are empty (e.g. after a fresh revamp), seed them.
     const logCountRes = db.exec("SELECT count(*) FROM logs");
@@ -236,9 +253,9 @@ export const initDB = async (): Promise<AppState> => {
         db.run("INSERT OR IGNORE INTO projects VALUES (?, ?, ?)", [SEED_PROJECT.id, SEED_PROJECT.name, SEED_PROJECT.createdAt]);
 
         // 2. Add Questions if missing
-        const stmt = db.prepare("INSERT OR IGNORE INTO questions VALUES (?, ?, ?, ?, ?, ?)");
+        const stmt = db.prepare("INSERT OR IGNORE INTO questions VALUES (?, ?, ?, ?, ?, ?, ?)");
         SEED_QUESTIONS.forEach(q => {
-            stmt.run([q.id, q.projectId, q.text, JSON.stringify(q.schedule), q.createdAt, q.desiredOutcome]);
+            stmt.run([q.id, q.projectId, q.text, JSON.stringify(q.schedule), q.createdAt, q.desiredOutcome, q.isArchived]);
         });
         stmt.free();
 
@@ -267,7 +284,8 @@ export const initDB = async (): Promise<AppState> => {
         text TEXT, 
         schedule TEXT, 
         created_at INTEGER,
-        desired_outcome TEXT DEFAULT 'YES'
+        desired_outcome TEXT DEFAULT 'YES',
+        is_archived INTEGER DEFAULT 0
       );
       CREATE TABLE IF NOT EXISTS logs (
         date TEXT, 
@@ -281,9 +299,9 @@ export const initDB = async (): Promise<AppState> => {
     // Seed Initial Data
     db.run("INSERT INTO projects VALUES (?, ?, ?)", [SEED_PROJECT.id, SEED_PROJECT.name, SEED_PROJECT.createdAt]);
     
-    const stmt = db.prepare("INSERT INTO questions VALUES (?, ?, ?, ?, ?, ?)");
+    const stmt = db.prepare("INSERT INTO questions VALUES (?, ?, ?, ?, ?, ?, ?)");
     SEED_QUESTIONS.forEach(q => {
-      stmt.run([q.id, q.projectId, q.text, JSON.stringify(q.schedule), q.createdAt, q.desiredOutcome]);
+      stmt.run([q.id, q.projectId, q.text, JSON.stringify(q.schedule), q.createdAt, q.desiredOutcome, q.isArchived]);
     });
     stmt.free();
     
@@ -328,7 +346,8 @@ export const fetchState = (): AppState => {
         text: row[2],
         schedule: JSON.parse(row[3]),
         createdAt: row[4],
-        desiredOutcome: (row[5] as AnswerState) || AnswerState.YES
+        desiredOutcome: (row[5] as AnswerState) || AnswerState.YES,
+        isArchived: row[6] === 1 ? 1 : 0
       });
     });
   }
@@ -367,7 +386,7 @@ export const dbDeleteProject = async (id: string) => {
 
 export const dbAddQuestion = async (q: Question) => {
   if (!db) return;
-  db.run("INSERT OR REPLACE INTO questions VALUES (?, ?, ?, ?, ?, ?)", [q.id, q.projectId, q.text, JSON.stringify(q.schedule), q.createdAt, q.desiredOutcome]);
+  db.run("INSERT OR REPLACE INTO questions VALUES (?, ?, ?, ?, ?, ?, ?)", [q.id, q.projectId, q.text, JSON.stringify(q.schedule), q.createdAt, q.desiredOutcome, q.isArchived || 0]);
   await saveDB();
 };
 
