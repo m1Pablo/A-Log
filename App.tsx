@@ -1,17 +1,17 @@
-
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { initDB, dbAddQuestion, dbDeleteQuestion, dbUpdateLog, dbAddProject, dbDeleteProject } from './services/storageService';
 import { AppState, AnswerState, Question, Project } from './types';
 import { DailyView } from './components/DailyView';
 import { ManageQuestions } from './components/ManageQuestions';
 import { StatsView } from './components/StatsView';
-import { ListTodo, Settings, Monitor, Database, Plus, Folder, FolderOpen, Trash2 } from 'lucide-react';
+import { ListTodo, Settings, Monitor, Database, Plus, Folder, FolderOpen, Trash2, Info, AlertTriangle, X } from 'lucide-react';
 import { RetroButton } from './components/RetroButton';
 
 enum View {
   DAILY = 'DAILY',
   MANAGE = 'MANAGE',
-  STATS = 'STATS'
+  STATS = 'STATS',
+  ABOUT = 'ABOUT'
 }
 
 function App() {
@@ -21,6 +21,13 @@ function App() {
   const [isLoaded, setIsLoaded] = useState(false);
   const [isCreatingProject, setIsCreatingProject] = useState(false);
   const [newProjectName, setNewProjectName] = useState('');
+
+  // Project Creation Ref
+  const createProjectRef = useRef<HTMLDivElement>(null);
+
+  // Delete Project Modal State
+  const [projectToDelete, setProjectToDelete] = useState<Project | null>(null);
+  const [deleteConfirmationInput, setDeleteConfirmationInput] = useState('');
 
   useEffect(() => {
     const init = async () => {
@@ -38,6 +45,33 @@ function App() {
     };
     init();
   }, []);
+
+  // Handle outside clicks and ESC for Project Creation
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (createProjectRef.current && !createProjectRef.current.contains(event.target as Node)) {
+        setIsCreatingProject(false);
+        setNewProjectName('');
+      }
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsCreatingProject(false);
+        setNewProjectName('');
+      }
+    };
+
+    if (isCreatingProject) {
+      document.addEventListener('mousedown', handleClickOutside);
+      document.addEventListener('keydown', handleKeyDown);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isCreatingProject]);
 
   // Filter Data for Active Project
   const activeQuestions = useMemo(() => {
@@ -70,19 +104,31 @@ function App() {
       await dbAddProject(newProject);
   };
 
-  const handleDeleteProject = async (id: string) => {
-      if (confirm("DELETE PROJECT? THIS CANNOT BE UNDONE.")) {
-          setState(prev => ({
-             ...prev,
-             projects: prev.projects.filter(p => p.id !== id),
-             questions: prev.questions.filter(q => q.projectId !== id)
-          }));
-          if (activeProjectId === id) {
-              setActiveProjectId(state.projects.find(p => p.id !== id)?.id || null);
-          }
-          await dbDeleteProject(id);
+  const requestDeleteProject = (e: React.MouseEvent, p: Project) => {
+      e.stopPropagation();
+      setProjectToDelete(p);
+      setDeleteConfirmationInput('');
+  };
+
+  const executeDeleteProject = async () => {
+      if (!projectToDelete) return;
+      const id = projectToDelete.id;
+
+      setState(prev => ({
+         ...prev,
+         projects: prev.projects.filter(p => p.id !== id),
+         questions: prev.questions.filter(q => q.projectId !== id)
+      }));
+
+      if (activeProjectId === id) {
+          // Switch to another project if available, or null
+          const remaining = state.projects.find(p => p.id !== id);
+          setActiveProjectId(remaining ? remaining.id : null);
       }
-  }
+
+      await dbDeleteProject(id);
+      setProjectToDelete(null);
+  };
 
   const updateLog = (date: string, qId: string, answer: AnswerState) => {
     if (!activeProjectId) return;
@@ -147,20 +193,24 @@ function App() {
           <h1 className="text-4xl font-bold tracking-tighter flex items-center gap-2 text-[#8AFF80]">
              A-Log
           </h1>
-          <p className="text-xs text-[#708CA9] mt-2">v0.2.0 [PROJECT_SUPPORT]</p>
+          <p className="text-xs text-[#708CA9] mt-2">v1.0.0</p>
         </div>
         
         {/* Project Selector */}
         <div className="p-4 border-b-2 border-[#708CA9] bg-[#0B0D0F]">
             <div className="text-xs text-[#708CA9] uppercase font-bold mb-2 flex justify-between items-center">
                 <span>ACTIVE_PROJECT</span>
-                <button onClick={() => setIsCreatingProject(!isCreatingProject)} className="hover:text-[#8AFF80]">
+                <button 
+                  onClick={() => setIsCreatingProject(!isCreatingProject)} 
+                  className={`hover:text-[#8AFF80] transition-transform ${isCreatingProject ? 'rotate-45' : ''}`}
+                  title={isCreatingProject ? "Cancel" : "Create Project"}
+                >
                     <Plus className="w-4 h-4" />
                 </button>
             </div>
             
             {isCreatingProject && (
-                <div className="mb-4 border border-[#708CA9] p-2 animate-in fade-in slide-in-from-top-2">
+                <div ref={createProjectRef} className="mb-4 border border-[#708CA9] p-2 animate-in fade-in slide-in-from-top-2 relative">
                     <input 
                         type="text" 
                         value={newProjectName}
@@ -170,6 +220,7 @@ function App() {
                         autoFocus
                     />
                     <RetroButton onClick={handleCreateProject} className="w-full py-1 text-xs">CREATE</RetroButton>
+                    <div className="text-[10px] text-[#708CA9]/50 text-center mt-1">ESC to cancel</div>
                 </div>
             )}
 
@@ -179,7 +230,7 @@ function App() {
                         key={p.id}
                         onClick={() => setActiveProjectId(p.id)}
                         className={`
-                            flex items-center justify-between px-3 py-2 cursor-pointer transition-all border
+                            group flex items-center justify-between px-3 py-2 cursor-pointer transition-all border
                             ${activeProjectId === p.id 
                                 ? 'bg-[#708CA9]/20 border-[#8AFF80] text-[#8AFF80]' 
                                 : 'border-transparent hover:border-[#708CA9] text-[#708CA9] hover:bg-[#708CA9]/10'}
@@ -189,10 +240,15 @@ function App() {
                             {activeProjectId === p.id ? <FolderOpen className="w-4 h-4 shrink-0" /> : <Folder className="w-4 h-4 shrink-0" />}
                             <span className="text-sm font-bold truncate">{p.name}</span>
                         </div>
-                        {activeProjectId === p.id && state.projects.length > 1 && (
+                        {/* Delete button: Visible if Active OR on Hover (Group Hover), only if more than 1 project exists */}
+                        {state.projects.length > 1 && (
                             <button 
-                                onClick={(e) => { e.stopPropagation(); handleDeleteProject(p.id); }}
-                                className="text-[#FF80BF] hover:bg-[#FF80BF] hover:text-[#0B0D0F] p-1 rounded-sm"
+                                onClick={(e) => requestDeleteProject(e, p)}
+                                className={`
+                                    text-[#FF9580] hover:bg-[#FF9580] hover:text-[#0B0D0F] p-1 rounded-sm transition-opacity
+                                    ${activeProjectId === p.id ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}
+                                `}
+                                title="Delete Project"
                             >
                                 <Trash2 className="w-3 h-3" />
                             </button>
@@ -220,6 +276,12 @@ function App() {
             onClick={() => setCurrentView(View.MANAGE)}
             icon={<Settings />}
             label="SETTINGS"
+          />
+          <NavButton 
+            active={currentView === View.ABOUT} 
+            onClick={() => setCurrentView(View.ABOUT)}
+            icon={<Info />}
+            label="ABOUT"
           />
         </div>
 
@@ -256,13 +318,94 @@ function App() {
                 />
               )}
               {currentView === View.STATS && (
-                // We pass a filtered State object to StatsView so it only processes relevant data
                 <StatsView state={{...state, questions: activeQuestions}} />
+              )}
+              {currentView === View.ABOUT && (
+                 <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4">
+                     <div className="border-b-2 border-[#708CA9] pb-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                        <h2 className="text-3xl uppercase animate-pulse text-[#708CA9]">>> ABOUT</h2>
+                     </div>
+                     <div className="border-2 border-[#708CA9] p-8 bg-[#0B0D0F] shadow-[8px_8px_0px_0px_rgba(112,140,169,0.3)]">
+                        <h3 className="text-2xl text-[#8AFF80] mb-6 font-bold uppercase">PHILOSOPHY OF A-LOG</h3>
+                        <div className="space-y-6 text-lg leading-relaxed text-[#708CA9]">
+                            <p>
+                                <span className="text-[#8AFF80] font-bold">A-Log</span> stands for <span className="text-[#8AFF80]">A</span>ccountability<span className="text-[#8AFF80]">-Log</span>. It is designed for those who reject the ephemeral and cloud-dependent nature of modern applications.
+                            </p>
+                            <p>
+                                In a world of infinite distraction, <span className="text-[#8AFF80]">binary choices</span> are a mechanism for truth. You either did the work, or you didn't. There are no excuses, no partial credits, and no "maybe" states.
+                            </p>
+                            <div className="border-l-4 border-[#8AFF80] pl-6 italic text-[#8AFF80]/80 py-2 my-8">
+                                "The only metric that matters is the record you keep with yourself."
+                            </div>
+                            <h4 className="text-[#8AFF80] font-bold uppercase mt-8 mb-2 text-sm tracking-widest">PRIVACY & OWNERSHIP</h4>
+                            <p>
+                                This application follows a <span className="text-[#8AFF80]">Local-First</span> architecture. Your data is stored in a secure SQLite container directly within your browser. There is no cloud backend, no tracking, and no data harvesting. You own your database file and can export it at any time.
+                            </p>
+                            <h4 className="text-[#8AFF80] font-bold uppercase mt-8 mb-2 text-sm tracking-widest">INTENTIONAL FRICTION</h4>
+                            <p>
+                                The interface is designed to add intentional friction to modifying the past. Once a day is logged, the record is locked. Unlocking it is a deliberate action, serving as a psychological barrier to rewriting history.
+                            </p>
+                        </div>
+                     </div>
+                 </div>
               )}
              </>
           )}
         </div>
       </main>
+
+      {/* DELETE PROJECT CONFIRMATION MODAL */}
+      {projectToDelete && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+              <div className="bg-[#0B0D0F] border-2 border-[#FF9580] p-6 max-w-md w-full shadow-[8px_8px_0px_0px_rgba(255,149,128,0.3)] relative animate-in zoom-in-95 duration-200">
+                  <div className="absolute top-0 left-0 bg-[#FF9580] text-[#0B0D0F] px-2 py-1 text-xs font-bold flex items-center gap-2">
+                      <AlertTriangle className="w-3 h-3" /> DANGER_ZONE
+                  </div>
+                  <button 
+                    onClick={() => setProjectToDelete(null)}
+                    className="absolute top-2 right-2 text-[#708CA9] hover:text-[#FF9580]"
+                  >
+                      <X className="w-5 h-5" />
+                  </button>
+
+                  <h3 className="text-xl text-[#FF9580] mt-6 mb-4 font-bold uppercase">DELETE PROJECT?</h3>
+                  <p className="text-[#708CA9] mb-4 text-sm">
+                      This action will permanently delete <span className="text-[#FF9580] font-bold">"{projectToDelete.name}"</span> and all associated logs. This cannot be undone.
+                  </p>
+                  
+                  <div className="mb-6">
+                      <label className="block text-xs text-[#708CA9] mb-2 uppercase">
+                          Type <span className="text-[#FF9580] font-bold">{projectToDelete.name}</span> to confirm:
+                      </label>
+                      <input 
+                          type="text"
+                          value={deleteConfirmationInput}
+                          onChange={(e) => setDeleteConfirmationInput(e.target.value)}
+                          className="w-full bg-[#0B0D0F] border-2 border-[#708CA9] p-2 text-[#FF9580] focus:border-[#FF9580] outline-none font-bold uppercase"
+                          autoFocus
+                          placeholder={projectToDelete.name}
+                      />
+                  </div>
+
+                  <div className="flex justify-end gap-3">
+                      <RetroButton 
+                          variant="secondary" 
+                          onClick={() => setProjectToDelete(null)}
+                      >
+                          CANCEL
+                      </RetroButton>
+                      <RetroButton 
+                          variant="danger" 
+                          onClick={executeDeleteProject}
+                          disabled={deleteConfirmationInput !== projectToDelete.name}
+                          className={deleteConfirmationInput !== projectToDelete.name ? 'opacity-50 cursor-not-allowed' : ''}
+                      >
+                          DELETE
+                      </RetroButton>
+                  </div>
+              </div>
+          </div>
+      )}
     </div>
   );
 }

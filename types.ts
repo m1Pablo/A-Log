@@ -15,6 +15,7 @@ export interface Question {
   id: string;
   projectId: string;
   text: string;
+  desiredOutcome: AnswerState; // YES or NO
   schedule: number[]; // 0 (Sun) - 6 (Sat)
   createdAt: number;
 }

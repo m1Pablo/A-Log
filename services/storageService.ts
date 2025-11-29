@@ -1,4 +1,3 @@
-
 import { AppState, Question, DailyLog, AnswerState, Project } from '../types';
 
 declare global {
@@ -69,6 +68,7 @@ const SEED_QUESTIONS: Question[] = [
     id: 'q_health_food',
     projectId: 'p_better_me',
     text: 'Did you eat whole foods today?',
+    desiredOutcome: AnswerState.YES,
     schedule: [0, 1, 2, 3, 4, 5, 6], // Daily
     createdAt: Date.now()
   },
@@ -76,6 +76,7 @@ const SEED_QUESTIONS: Question[] = [
     id: 'q_health_exercise',
     projectId: 'p_better_me',
     text: 'Did you exercise for 30 mins?',
+    desiredOutcome: AnswerState.YES,
     schedule: [0, 1, 2, 3, 4, 5, 6], // Daily
     createdAt: Date.now()
   },
@@ -83,13 +84,23 @@ const SEED_QUESTIONS: Question[] = [
     id: 'q_wlb_logoff',
     projectId: 'p_better_me',
     text: 'Did you log off work by 6PM?',
+    desiredOutcome: AnswerState.YES,
     schedule: [1, 2, 3, 4, 5], // Mon-Fri
+    createdAt: Date.now()
+  },
+  {
+    id: 'q_doomscroll',
+    projectId: 'p_better_me',
+    text: 'Did you doomscroll on social media?',
+    desiredOutcome: AnswerState.NO,
+    schedule: [0, 1, 2, 3, 4, 5, 6], // Daily
     createdAt: Date.now()
   },
   {
     id: 'q_self_leisure',
     projectId: 'p_better_me',
     text: 'Did you do something just for yourself?',
+    desiredOutcome: AnswerState.YES,
     schedule: [0, 1, 2, 3, 4, 5, 6], // Daily
     createdAt: Date.now()
   },
@@ -97,6 +108,7 @@ const SEED_QUESTIONS: Question[] = [
     id: 'q_social_friends',
     projectId: 'p_better_me',
     text: 'Did you check in with friends this week?',
+    desiredOutcome: AnswerState.YES,
     schedule: [0], // Sunday check-in
     createdAt: Date.now()
   },
@@ -104,6 +116,7 @@ const SEED_QUESTIONS: Question[] = [
     id: 'q_social_family',
     projectId: 'p_better_me',
     text: 'Did you call your family?',
+    desiredOutcome: AnswerState.YES,
     schedule: [0], // Sunday check-in
     createdAt: Date.now()
   }
@@ -122,7 +135,8 @@ const generateMockLogs = (questions: Question[]) => {
     const today = new Date();
     
     // Generate data for past 45 days to show detailed history
-    for (let i = 0; i < 45; i++) {
+    // Start from i=1 (Yesterday) to ensure Today is empty for the demo
+    for (let i = 1; i <= 45; i++) {
         const date = new Date(today);
         date.setDate(date.getDate() - i);
         const dateStr = getLocalDateStr(date);
@@ -143,6 +157,10 @@ const generateMockLogs = (questions: Question[]) => {
                          } else {
                              answer = Math.random() > 0.3 ? AnswerState.YES : AnswerState.NO;
                          }
+                    } else if (q.id === 'q_doomscroll') {
+                        // We want the answer to be NO (success).
+                        // Let's say we fail (answer YES) 40% of the time.
+                        answer = Math.random() > 0.6 ? AnswerState.YES : AnswerState.NO;
                     } else if (q.id === 'q_wlb_logoff') {
                          // Work Life Balance: Often fails on Wednesdays/Thursdays
                          answer = Math.random() > 0.4 ? AnswerState.YES : AnswerState.NO;
@@ -150,8 +168,13 @@ const generateMockLogs = (questions: Question[]) => {
                          // 50/50 struggle
                          answer = Math.random() > 0.5 ? AnswerState.YES : AnswerState.NO;
                     } else {
-                         // General 70% success rate
-                         answer = Math.random() > 0.3 ? AnswerState.YES : AnswerState.NO;
+                         // General 70% success rate (Success means answer == desiredOutcome)
+                         const isSuccess = Math.random() > 0.3;
+                         if (isSuccess) {
+                             answer = q.desiredOutcome;
+                         } else {
+                             answer = q.desiredOutcome === AnswerState.YES ? AnswerState.NO : AnswerState.YES;
+                         }
                     }
                     
                     logs.push([dateStr, q.id, q.projectId, answer]);
@@ -193,29 +216,29 @@ export const initDB = async (): Promise<AppState> => {
     } catch (e) {
         console.log("Migrating DB: Adding projects table");
         db.run(`CREATE TABLE IF NOT EXISTS projects (id TEXT PRIMARY KEY, name TEXT, created_at INTEGER);`);
-        
-        // Ensure default project exists
         db.run("INSERT OR REPLACE INTO projects VALUES (?, ?, ?)", ['default', 'LEGACY LOG', Date.now()]);
-        
-        // Attempt to add columns if missing (ignoring errors if they exist)
         try { db.run("ALTER TABLE questions ADD COLUMN project_id TEXT DEFAULT 'default'"); } catch(e) {}
         try { db.run("ALTER TABLE logs ADD COLUMN project_id TEXT DEFAULT 'default'"); } catch(e) {}
+    }
+    
+    // MIGRATION: Add desired_outcome column if missing
+    try {
+        db.run("ALTER TABLE questions ADD COLUMN desired_outcome TEXT DEFAULT 'YES'"); 
+    } catch(e) {
+        // Column likely exists
     }
     
     // DATA SEEDING CHECK: If logs are empty (e.g. after a fresh revamp), seed them.
     const logCountRes = db.exec("SELECT count(*) FROM logs");
     if (logCountRes.length > 0 && logCountRes[0].values[0][0] === 0) {
         console.log("Seeding mock logs for existing DB...");
-        // Ensure mock questions exist if using seed project
-        // For simplicity in this demo, we re-insert seeds if missing or just add logs for existing Qs
         
-        // 1. Check if 'Better Me' project exists, if not add it
         db.run("INSERT OR IGNORE INTO projects VALUES (?, ?, ?)", [SEED_PROJECT.id, SEED_PROJECT.name, SEED_PROJECT.createdAt]);
 
         // 2. Add Questions if missing
-        const stmt = db.prepare("INSERT OR IGNORE INTO questions VALUES (?, ?, ?, ?, ?)");
+        const stmt = db.prepare("INSERT OR IGNORE INTO questions VALUES (?, ?, ?, ?, ?, ?)");
         SEED_QUESTIONS.forEach(q => {
-            stmt.run([q.id, q.projectId, q.text, JSON.stringify(q.schedule), q.createdAt]);
+            stmt.run([q.id, q.projectId, q.text, JSON.stringify(q.schedule), q.createdAt, q.desiredOutcome]);
         });
         stmt.free();
 
@@ -243,7 +266,8 @@ export const initDB = async (): Promise<AppState> => {
         project_id TEXT,
         text TEXT, 
         schedule TEXT, 
-        created_at INTEGER
+        created_at INTEGER,
+        desired_outcome TEXT DEFAULT 'YES'
       );
       CREATE TABLE IF NOT EXISTS logs (
         date TEXT, 
@@ -257,9 +281,9 @@ export const initDB = async (): Promise<AppState> => {
     // Seed Initial Data
     db.run("INSERT INTO projects VALUES (?, ?, ?)", [SEED_PROJECT.id, SEED_PROJECT.name, SEED_PROJECT.createdAt]);
     
-    const stmt = db.prepare("INSERT INTO questions VALUES (?, ?, ?, ?, ?)");
+    const stmt = db.prepare("INSERT INTO questions VALUES (?, ?, ?, ?, ?, ?)");
     SEED_QUESTIONS.forEach(q => {
-      stmt.run([q.id, q.projectId, q.text, JSON.stringify(q.schedule), q.createdAt]);
+      stmt.run([q.id, q.projectId, q.text, JSON.stringify(q.schedule), q.createdAt, q.desiredOutcome]);
     });
     stmt.free();
     
@@ -303,7 +327,8 @@ export const fetchState = (): AppState => {
         projectId: row[1],
         text: row[2],
         schedule: JSON.parse(row[3]),
-        createdAt: row[4]
+        createdAt: row[4],
+        desiredOutcome: (row[5] as AnswerState) || AnswerState.YES
       });
     });
   }
@@ -315,7 +340,6 @@ export const fetchState = (): AppState => {
     lRes[0].values.forEach((row: any) => {
       const date = row[0];
       const qId = row[1];
-      // const pId = row[2]; // We can filter logs by question ID in the UI
       const ans = row[3];
       
       if (!logs[date]) logs[date] = {};
@@ -338,13 +362,12 @@ export const dbDeleteProject = async (id: string) => {
     if (!db) return;
     db.run("DELETE FROM projects WHERE id = ?", [id]);
     db.run("DELETE FROM questions WHERE project_id = ?", [id]);
-    // Logs cleanup would require more complex queries or filtering
     await saveDB();
 }
 
 export const dbAddQuestion = async (q: Question) => {
   if (!db) return;
-  db.run("INSERT OR REPLACE INTO questions VALUES (?, ?, ?, ?, ?)", [q.id, q.projectId, q.text, JSON.stringify(q.schedule), q.createdAt]);
+  db.run("INSERT OR REPLACE INTO questions VALUES (?, ?, ?, ?, ?, ?)", [q.id, q.projectId, q.text, JSON.stringify(q.schedule), q.createdAt, q.desiredOutcome]);
   await saveDB();
 };
 

@@ -1,3 +1,4 @@
+
 import { DailyLog, Question, AnswerState, Granularity, DateRange } from '../types';
 
 // --- Date Math Helpers ---
@@ -110,11 +111,14 @@ export interface ChartDataPoint {
   total: number;
 }
 
+export type ViewMode = 'raw' | 'adherence';
+
 export const aggregateData = (
   logs: DailyLog, 
   questions: Question[], 
   range: DateRange, 
-  granularity: Granularity
+  granularity: Granularity,
+  viewMode: ViewMode = 'raw'
 ): ChartDataPoint[] => {
   const dataMap = new Map<string, ChartDataPoint>();
   const cursor = new Date(range.start);
@@ -155,15 +159,25 @@ export const aggregateData = (
     // Find valid questions for this specific day of week
     const daysQuestions = questions.filter(q => q.schedule.includes(dayOfWeek));
     
-    // Tally
     daysQuestions.forEach(q => {
-      // If granularity is large, we might not want to count "Total" as every possible question 
-      // but usually for adherence, we compare Answers vs Expected.
-      // However, simplified: Yes count vs No count.
       const ans = log[q.id];
-      if (ans === AnswerState.YES) entry.yes++;
-      if (ans === AnswerState.NO) entry.no++;
-      // entry.total += 1; // Optional: Track potential total
+      if (ans && ans !== AnswerState.UNANSWERED) {
+          entry.total++;
+          
+          if (viewMode === 'raw') {
+              if (ans === AnswerState.YES) entry.yes++;
+              if (ans === AnswerState.NO) entry.no++;
+          } else {
+              // Adherence Mode
+              // YES bucket = SUCCESS (Matches desired outcome) -> POSITIVE
+              // NO bucket = FAIL (Does not match desired outcome) -> NEGATIVE
+              if (ans === q.desiredOutcome) {
+                  entry.yes++; 
+              } else {
+                  entry.no--; // Negative value for failure
+              }
+          }
+      }
     });
 
     cursor.setDate(cursor.getDate() + 1);

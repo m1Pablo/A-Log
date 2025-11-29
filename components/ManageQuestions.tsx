@@ -1,8 +1,7 @@
-
 import React, { useState } from 'react';
-import { Question, DAYS_OF_WEEK } from '../types';
+import { Question, DAYS_OF_WEEK, AnswerState } from '../types';
 import { RetroButton } from './RetroButton';
-import { Trash2, Plus, Save, Download, Database, HelpCircle, Edit3 } from 'lucide-react';
+import { Trash2, Plus, Save, Download, Database, HelpCircle, Edit3, Target, RefreshCw } from 'lucide-react';
 import { exportSQLiteFile } from '../services/storageService';
 
 interface ManageQuestionsProps {
@@ -15,6 +14,7 @@ interface ManageQuestionsProps {
 export const ManageQuestions: React.FC<ManageQuestionsProps> = ({ questions, onAdd, onUpdate, onDelete }) => {
   const [newText, setNewText] = useState('');
   const [schedule, setSchedule] = useState<number[]>([0, 1, 2, 3, 4, 5, 6]);
+  const [desiredOutcome, setDesiredOutcome] = useState<AnswerState>(AnswerState.YES);
   const [isAdding, setIsAdding] = useState(false);
 
   const toggleDay = (dayIndex: number) => {
@@ -36,6 +36,11 @@ export const ManageQuestions: React.FC<ManageQuestionsProps> = ({ questions, onA
     onUpdate({ ...q, schedule: newSchedule });
   };
 
+  const toggleDesiredOutcome = (q: Question) => {
+    const newOutcome = q.desiredOutcome === AnswerState.YES ? AnswerState.NO : AnswerState.YES;
+    onUpdate({ ...q, desiredOutcome: newOutcome });
+  };
+
   const handleSave = () => {
     if (!newText.trim() || schedule.length === 0) return;
     
@@ -45,12 +50,14 @@ export const ManageQuestions: React.FC<ManageQuestionsProps> = ({ questions, onA
       projectId: '', // Placeholder, will be overwritten by App.tsx
       text: newText,
       schedule,
+      desiredOutcome,
       createdAt: Date.now()
     };
     
     onAdd(newQuestion);
     setNewText('');
     setSchedule([0, 1, 2, 3, 4, 5, 6]);
+    setDesiredOutcome(AnswerState.YES);
     setIsAdding(false);
   };
 
@@ -99,6 +106,24 @@ export const ManageQuestions: React.FC<ManageQuestionsProps> = ({ questions, onA
               />
             </div>
 
+            <div className="mb-4">
+               <label className="block mb-2 text-[#8AFF80]">TARGET_GOAL:</label>
+               <div className="flex gap-4">
+                   <button 
+                       onClick={() => setDesiredOutcome(AnswerState.YES)}
+                       className={`flex-1 p-2 border-2 text-center uppercase font-bold transition-all ${desiredOutcome === AnswerState.YES ? 'bg-[#7FEDFA] text-[#0B0D0F] border-[#7FEDFA]' : 'text-[#708CA9] border-[#708CA9]'}`}
+                   >
+                       GOAL: YES
+                   </button>
+                   <button 
+                       onClick={() => setDesiredOutcome(AnswerState.NO)}
+                       className={`flex-1 p-2 border-2 text-center uppercase font-bold transition-all ${desiredOutcome === AnswerState.NO ? 'bg-[#FF9580] text-[#0B0D0F] border-[#FF9580]' : 'text-[#708CA9] border-[#708CA9]'}`}
+                   >
+                       GOAL: NO
+                   </button>
+               </div>
+            </div>
+
             <div className="mb-6">
               <label className="block mb-2 text-[#8AFF80]">EXECUTION_SCHEDULE:</label>
               <div className="flex flex-wrap gap-2">
@@ -133,6 +158,20 @@ export const ManageQuestions: React.FC<ManageQuestionsProps> = ({ questions, onA
         {questions.map(q => (
           <div key={q.id} className="border-2 border-[#708CA9] p-4 flex items-center justify-between hover:border-[#8AFF80] transition-colors bg-[#0B0D0F] group">
             <div className="flex-1">
+              <div className="flex items-center gap-2 mb-2">
+                 <button 
+                    onClick={() => toggleDesiredOutcome(q)}
+                    title="Click to toggle Goal"
+                    className={`
+                        text-xs font-bold px-2 py-0.5 border flex items-center gap-1 cursor-pointer transition-all hover:brightness-110 active:scale-95
+                        ${q.desiredOutcome === AnswerState.YES 
+                            ? 'text-[#7FEDFA] border-[#7FEDFA] hover:bg-[#7FEDFA]/10' 
+                            : 'text-[#FF9580] border-[#FF9580] hover:bg-[#FF9580]/10'}
+                 `}>
+                    <RefreshCw className="w-3 h-3" />
+                    GOAL: {q.desiredOutcome}
+                 </button>
+              </div>
               <div className="text-xl font-bold text-[#708CA9] group-hover:text-[#8AFF80] transition-colors">{q.text}</div>
               
               <div className="mt-3 flex items-center gap-4">
@@ -160,7 +199,7 @@ export const ManageQuestions: React.FC<ManageQuestionsProps> = ({ questions, onA
             </div>
             <button 
               onClick={() => onDelete(q.id)}
-              className="ml-4 p-2 text-[#FF80BF] hover:bg-[#FF80BF] hover:text-[#0B0D0F] border-2 border-transparent hover:border-[#FF80BF] transition-all shrink-0"
+              className="ml-4 p-2 text-[#FF9580] hover:bg-[#FF9580] hover:text-[#0B0D0F] border-2 border-transparent hover:border-[#FF9580] transition-all shrink-0"
               title="Delete Question"
             >
               <Trash2 className="w-5 h-5" />

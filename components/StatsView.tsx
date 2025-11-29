@@ -1,15 +1,54 @@
+
 import React, { useMemo, useState, useEffect } from 'react';
 import { AppState, DateRange, Granularity } from '../types';
-import { aggregateData, getPresets } from '../services/dateUtils';
+import { aggregateData, getPresets, ViewMode } from '../services/dateUtils';
 import { DateRangePicker } from './DateRangePicker';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, CartesianGrid } from 'recharts';
+import { ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, CartesianGrid, ReferenceLine } from 'recharts';
 import { RetroButton } from './RetroButton';
 import { generateInsights } from '../services/geminiService';
-import { Brain, Terminal, Filter, CheckSquare, Square } from 'lucide-react';
+import { Brain, Terminal, Filter, CheckSquare, Square, Target, BarChart2, Check } from 'lucide-react';
 
 interface StatsViewProps {
   state: AppState;
 }
+
+const CustomTooltip = ({ active, payload, label, viewMode }: any) => {
+  if (active && payload && payload.length) {
+    return (
+      <div className="bg-[#0B0D0F] border-2 border-[#708CA9] p-2 font-mono shadow-[4px_4px_0px_0px_rgba(112,140,169,0.3)]">
+        <p className="text-[#708CA9] border-b border-[#708CA9] mb-2 pb-1 text-sm font-bold">{label}</p>
+        {payload.map((entry: any, index: number) => {
+            // Skip the total line in tooltip if not needed, or format it differently
+            if (entry.dataKey === 'total') {
+                return (
+                    <div key="total" className="text-sm font-bold flex items-center justify-between gap-4 text-[#8AFF80] border-t border-[#708CA9]/30 mt-1 pt-1">
+                        <span>TOTAL LOGGED:</span>
+                        <span>{entry.value}</span>
+                    </div>
+                );
+            }
+
+            const isPositive = entry.dataKey === 'yes';
+            // Blue for Positive/Success, Red for Negative/Fail
+            const color = isPositive ? '#7FEDFA' : '#FF9580';
+            
+            let nameLabel = isPositive ? 'YES' : 'NO';
+            if (viewMode === 'adherence') {
+                nameLabel = isPositive ? 'SUCCESS' : 'FAIL';
+            }
+            
+            return (
+                <div key={index} style={{ color: color }} className="text-sm font-bold flex items-center justify-between gap-4">
+                    <span>{nameLabel}:</span>
+                    <span>{Math.abs(entry.value)}</span>
+                </div>
+            );
+        })}
+      </div>
+    );
+  }
+  return null;
+};
 
 export const StatsView: React.FC<StatsViewProps> = ({ state }) => {
   const [insight, setInsight] = useState<string | null>(null);
@@ -19,6 +58,7 @@ export const StatsView: React.FC<StatsViewProps> = ({ state }) => {
   // Default range: Last 14 days
   const [dateRange, setDateRange] = useState<DateRange>(getPresets().Last[1]); // Index 1 is Last 14 days
   const [granularity, setGranularity] = useState<Granularity>('day');
+  const [viewMode, setViewMode] = useState<ViewMode>('raw');
   
   // Question Filter State
   const [selectedQuestionIds, setSelectedQuestionIds] = useState<string[]>([]);
@@ -36,8 +76,8 @@ export const StatsView: React.FC<StatsViewProps> = ({ state }) => {
   }, [state.questions, selectedQuestionIds]);
 
   const chartData = useMemo(() => {
-    return aggregateData(state.logs, filteredQuestions, dateRange, granularity);
-  }, [state.logs, filteredQuestions, dateRange, granularity]);
+    return aggregateData(state.logs, filteredQuestions, dateRange, granularity, viewMode);
+  }, [state.logs, filteredQuestions, dateRange, granularity, viewMode]);
 
   const handleGenerateInsight = async () => {
     setLoading(true);
@@ -110,7 +150,7 @@ export const StatsView: React.FC<StatsViewProps> = ({ state }) => {
                         <div className="p-2 border-b border-[#708CA9] flex justify-between bg-[#708CA9]/10">
                             <button onClick={selectAll} className="text-xs text-[#8AFF80] hover:underline">ALL</button>
                             <span className="text-xs text-[#708CA9]">FILTER_SOURCES</span>
-                            <button onClick={clearAll} className="text-xs text-[#FF80BF] hover:underline">NONE</button>
+                            <button onClick={clearAll} className="text-xs text-[#FF9580] hover:underline">NONE</button>
                         </div>
                         <div className="overflow-y-auto flex-1 p-2 space-y-1">
                             {state.questions.map(q => {
@@ -145,12 +185,41 @@ export const StatsView: React.FC<StatsViewProps> = ({ state }) => {
       {/* Chart Section */}
       <div className="border-2 border-[#708CA9] p-4 bg-[#0B0D0F] relative">
         <div className="absolute top-0 left-0 bg-[#708CA9] text-[#0B0D0F] px-2 text-sm font-bold flex items-center gap-2">
-           <Filter className="w-3 h-3" />
-           DATA_VISUALIZATION [{granularity.toUpperCase()}]
+           <BarChart2 className="w-3 h-3" />
+           DATA_VISUALIZATION
         </div>
-        <div className="h-80 mt-6">
+        
+        {/* View Mode Toggle */}
+        <div className="absolute top-2 right-2 flex gap-2">
+            <button 
+                onClick={() => setViewMode('raw')}
+                className={`
+                    px-2 py-1 text-xs font-bold border flex items-center gap-1 transition-colors
+                    ${viewMode === 'raw' 
+                        ? 'bg-[#8AFF80] text-[#0B0D0F] border-[#8AFF80]' 
+                        : 'text-[#708CA9] border-[#708CA9] bg-[#0B0D0F] hover:text-[#8AFF80] hover:border-[#8AFF80]'}
+                `}
+            >
+                <Check className="w-3 h-3" />
+                RAW (YES/NO)
+            </button>
+            <button 
+                onClick={() => setViewMode('adherence')}
+                className={`
+                    px-2 py-1 text-xs font-bold border flex items-center gap-1 transition-colors
+                    ${viewMode === 'adherence' 
+                        ? 'bg-[#8AFF80] text-[#0B0D0F] border-[#8AFF80]' 
+                        : 'text-[#708CA9] border-[#708CA9] bg-[#0B0D0F] hover:text-[#8AFF80] hover:border-[#8AFF80]'}
+                `}
+            >
+                <Target className="w-3 h-3" />
+                ADHERENCE (SUCCESS/FAIL)
+            </button>
+        </div>
+
+        <div className="h-80 mt-10">
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={chartData} barSize={granularity === 'day' ? 20 : 40} margin={{top: 20, right: 30, left: 0, bottom: 5}}>
+            <ComposedChart data={chartData} margin={{top: 20, right: 30, left: 0, bottom: 5}} stackOffset="sign">
               <CartesianGrid stroke="#708CA9" strokeDasharray="3 3" vertical={false} opacity={0.2} />
               <XAxis 
                 dataKey="key" 
@@ -163,24 +232,40 @@ export const StatsView: React.FC<StatsViewProps> = ({ state }) => {
                 stroke="#708CA9" 
                 tick={{fill: '#708CA9', fontFamily: 'Cascadia Code'}}
                 allowDecimals={false}
+                // When in adherence mode, negative values exist. Auto domain handles this usually, but we ensure it.
               />
               <Tooltip 
                 cursor={{fill: '#708CA9', opacity: 0.1}}
-                contentStyle={{ backgroundColor: '#0B0D0F', border: '2px solid #708CA9', color: '#708CA9', borderRadius: 0 }}
-                itemStyle={{ color: '#8AFF80' }}
-                labelStyle={{ color: '#708CA9', borderBottom: '1px solid #708CA9', marginBottom: '4px' }}
+                content={<CustomTooltip viewMode={viewMode} />}
               />
-              <Bar dataKey="yes" name="Positive" stackId="a" fill="#8AFF80">
+              <ReferenceLine y={0} stroke="#708CA9" strokeWidth={1} />
+              
+              {/* TARGET LINE - Only visible in Adherence Mode */}
+              {viewMode === 'adherence' && (
+                  <Line 
+                    type="step" 
+                    dataKey="total" 
+                    name="Target Success" 
+                    stroke="#8AFF80" 
+                    strokeDasharray="4 4" 
+                    dot={false} 
+                    strokeWidth={2}
+                    isAnimationActive={false}
+                  />
+              )}
+
+              {/* Stack ID 'a' ensures bars are stacked/aligned horizontally on the same axis */}
+              <Bar dataKey="yes" name="Positive" stackId="a" fill="#7FEDFA" barSize={granularity === 'day' ? 20 : 40}>
                 {chartData.map((entry, index) => (
                     <Cell key={`cell-yes-${index}`} stroke="#0B0D0F" strokeWidth={2} />
                 ))}
               </Bar>
-              <Bar dataKey="no" name="Negative" stackId="a" fill="#FF80BF">
+              <Bar dataKey="no" name="Negative" stackId="a" fill="#FF9580" barSize={granularity === 'day' ? 20 : 40}>
                 {chartData.map((entry, index) => (
                     <Cell key={`cell-no-${index}`} stroke="#0B0D0F" strokeWidth={2} />
                 ))}
               </Bar>
-            </BarChart>
+            </ComposedChart>
           </ResponsiveContainer>
         </div>
         {chartData.length === 0 && (
@@ -204,7 +289,7 @@ export const StatsView: React.FC<StatsViewProps> = ({ state }) => {
                  <span className="animate-pulse">PROCESSING DATA STREAMS...</span>
                </div>
              ) : error ? (
-                <div className="text-[#FF80BF]">
+                <div className="text-[#FF9580]">
                   ERROR: {error}
                   <br/>
                   <span className="text-xs text-[#708CA9]">CHECK API KEY CONFIGURATION.</span>
