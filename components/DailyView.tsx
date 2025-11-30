@@ -199,16 +199,15 @@ export const DailyView: React.FC<DailyViewProps> = ({ questions, logs, onUpdateL
       <div className="border-b-2 border-[#708CA9] pb-4 mb-6 flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
         <h2 className="text-3xl uppercase animate-pulse text-[#708CA9]">>> LOGS</h2>
         <div className="flex items-center gap-2">
-            {!isToday && (
-                <RetroButton 
-                    onClick={() => setSelectedDate(new Date())} 
-                    className="h-full"
-                    title="Jump to Today"
-                    variant="secondary"
-                >
-                    TODAY
-                </RetroButton>
-            )}
+            <RetroButton 
+                onClick={() => !isToday && setSelectedDate(new Date())} 
+                className={`h-full ${isToday ? 'opacity-50 cursor-default' : ''}`}
+                title="Jump to Today"
+                variant="secondary"
+                disabled={isToday}
+            >
+                TODAY
+            </RetroButton>
             <div className="flex items-center gap-2">
                 <button 
                     onClick={handlePrevDay}
